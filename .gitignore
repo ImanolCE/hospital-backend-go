@@ -1,0 +1,22 @@
+# Archivos de entorno
+.env
+.env.*
+!.env.example  # Excepción: permite .env.example
+
+# Dependencias
+node_modules/
+
+# Logs y archivos de sistema
+*.log
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.idea/
+.vscode/
+*.swp
+
+# Builds y compilados
+dist/
+build/
+*.exe
