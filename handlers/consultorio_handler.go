@@ -14,11 +14,8 @@ func CreateConsultorio(c *fiber.Ctx) error {
         return c.Status(400).JSON(fiber.Map{"error": "Datos inválidos"})
     }
 
-    // El orden de columnas debe coincidir con el INSERT
     _, err := config.DB.Exec(context.Background(),
-        `INSERT INTO consultorios
-            (nombre, tipo, ubicacion, id_medico)
-         VALUES ($1, $2, $3, $4)`,
+        `INSERT INTO consultorios (nombre, tipo, ubicacion, id_medico) VALUES ($1, $2, $3, $4)`,
         dto.Nombre, dto.Tipo, dto.Ubicacion, dto.MedicoID,
     )
     if err != nil {
@@ -27,11 +24,10 @@ func CreateConsultorio(c *fiber.Ctx) error {
     return c.JSON(fiber.Map{"message": "Consultorio creado correctamente"})
 }
 
-// GetConsultorios lista todos los consultorios (rutas protegidas)
+// GetConsultorios lista todos los consultorios 
 func GetConsultorios(c *fiber.Ctx) error {
     rows, err := config.DB.Query(context.Background(),
-        `SELECT id_consultorio, nombre, tipo, ubicacion, id_medico
-           FROM consultorios`,
+        `SELECT id_consultorio, nombre, tipo, ubicacion, id_medico FROM consultorios`,
     )
     if err != nil {
         return c.Status(500).JSON(fiber.Map{"error": "Error al obtener consultorios"})
@@ -58,8 +54,7 @@ func GetConsultorioByID(c *fiber.Ctx) error {
     var d models.Consultorio
 
     err := config.DB.QueryRow(context.Background(),
-        `SELECT id_consultorio, nombre, tipo, ubicacion, id_medico
-           FROM consultorios
+        `SELECT id_consultorio, nombre, tipo, ubicacion, id_medico FROM consultorios
           WHERE id_consultorio=$1`, id,
     ).Scan(
         &d.ID, &d.Nombre, &d.Tipo,
@@ -80,8 +75,7 @@ func UpdateConsultorio(c *fiber.Ctx) error {
     }
 
     _, err := config.DB.Exec(context.Background(),
-        `UPDATE consultorios
-            SET nombre=$1, tipo=$2, ubicacion=$3, id_medico=$4
+        `UPDATE consultorios SET nombre=$1, tipo=$2, ubicacion=$3, id_medico=$4
           WHERE id_consultorio=$5`,
         dto.Nombre, dto.Tipo, dto.Ubicacion, dto.MedicoID, id,
     )
