@@ -54,19 +54,21 @@ hospital-back/
 
 1.- Clonar el repositorio:
 
-git clone https://github.com/TU_USUARIO/hospital-back.git
+git clone https://github.com/ImanolCE/hospital-backend-go.git
 cd hospital-back
 
 2.- Crear archivo .env con la siguiente variable:
 
 SUPABASE_URL=postgresql://usuario:contraseña@host:puerto/base_de_datos
 
-Nota: se debera cambiar la contrseña con la contraseña de su proyecto en supabase
+Nota: Reemplazar los datos por los correspondientes a al proyecto en Supabase.
 
 3.- Instalar dependencias:
 
 go mod tidy
+
 go get github.com/gofiber/fiber/v2
+
 go get github.com/golang-jwt/jwt/v4
 
 4.- Para ejecutar la aplicación:

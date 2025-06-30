@@ -1,7 +1,5 @@
 # Changelog - Sistema de Citas y Reportes Hospitalarios
 
-Todos los cambios importantes se documentnan aquí.
-
 ---
 
 ## [1.0.0] - 2025-06-28
