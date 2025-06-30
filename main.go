@@ -27,6 +27,9 @@ func main() {
     // Registra las rutas de los horarios
      routes.HorarioRoutes(app)
 
+    // Regita las rutas de las consultas 
+     routes.ConsultaRoutes(app)
+
 	// Inicia el servidor en el puerto 3000
     app.Listen(":3000") 
 }
