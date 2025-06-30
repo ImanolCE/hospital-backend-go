@@ -3,7 +3,7 @@ package models
 
 // Estructura para User representa un registro de la tabla usuarios
 type User struct {
-    ID       int    `json:"id"`           
+    ID       int    `json:"id_usuario"`           
     Nombre   string `json:"nombre"`       
     Apellido string `json:"apellido"`     
     Correo   string `json:"correo"`      
