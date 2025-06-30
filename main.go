@@ -21,6 +21,9 @@ func main() {
 	// Registra las rutas de usuario
     routes.UserRoutes(app) 
 
+    // Registra las rutas de los consultorios
+     routes.ConsultorioRoutes(app)
+
 	// Inicia el servidor en el puerto 3000
     app.Listen(":3000") 
 }
