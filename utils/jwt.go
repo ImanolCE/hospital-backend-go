@@ -2,40 +2,45 @@ package utils
 
 import (
     "time"
-    "errors"
+    //"errors"
     "github.com/golang-jwt/jwt/v4"
+    "github.com/google/uuid"
 )
 
 // SecretKey es la clave secreta para firmar los tokens 
-var SecretKey = []byte("claveSuperSecreta")
+var SecretKey = []byte("claveSecretaHospital")
 
-// se genera un token JWT que contiene el ID del usuario
-func GenerarToken(userID int) (string, error) {
-    // Claims -> los datos que irán dentro del token
+
+// Genera un token que incluye user_id y lista de permisos
+func GenerarToken(userID int, permisos []string) (string, error) {
     claims := jwt.MapClaims{
-        "user_id": userID,                             // se guard el ID del usuario
-        "exp":     time.Now().Add(time.Hour * 1).Unix(), // se expira en 1 hora
+        "user_id":  userID,
+        "permisos": permisos,
+        "exp":      time.Now().Add(5 * time.Minute).Unix(),
     }
 
     token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
     return token.SignedString(SecretKey)
 }
 
-// ValidarToken recibe el token y lo parsea para que devuelva los claims si es válido
-func ValidarToken(tokenString string) (jwt.MapClaims, error) {
-    token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+// ValidarToken recibe el token y parsea para que devuelva los claims si es válido
+func ValidarAccessToken(tokenString string) (*jwt.MapClaims, error) {
+    token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
         return SecretKey, nil
     })
 
     if err != nil || !token.Valid {
-        return nil, errors.New("token inválido o expirado")
+        return nil, err
     }
+    claims := token.Claims.(jwt.MapClaims)
+    return &claims, nil
+}   
 
-    claims, ok := token.Claims.(jwt.MapClaims)
-    if !ok {
-        return nil, errors.New("no se pudieron obtener los claims")
-    }
+// GenerateRefreshToken crea un UUID como refresh token .
+func GenerateRefreshToken() (string, time.Time) {
+    token := uuid.NewString()
 
-    return claims, nil
+    // para que caduque en 7 
+    expiresAt := time.Now().Add(7 * 24 * time.Hour)
+    return token, expiresAt
 }
-    
