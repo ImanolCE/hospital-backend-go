@@ -12,10 +12,11 @@ var SecretKey = []byte("claveSecretaHospital")
 
 
 // Genera un token que incluye user_id y lista de permisos
-func GenerarToken(userID int, permisos []string) (string, error) {
+func GenerarToken(userID int, permisos []string, tipoUsuario string) (string, error) {
     claims := jwt.MapClaims{
         "user_id":  userID,
         "permisos": permisos,
+        "tipo_usuario": tipoUsuario,
         "exp":      time.Now().Add(5 * time.Minute).Unix(),
     }
 

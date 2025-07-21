@@ -11,12 +11,17 @@ import (
     "hospital-back/config"
     "hospital-back/models"
     "hospital-back/utils"
+    
 
     "github.com/gofiber/fiber/v2"
 
     "github.com/xeipuuv/gojsonschema"
 
     "golang.org/x/crypto/bcrypt"
+
+    "github.com/pquerna/otp"
+    "github.com/pquerna/otp/totp"
+    
 )
 
 const createUserSchema = `{
@@ -57,7 +62,9 @@ func CreateUser(c *fiber.Ctx) error {
     user := new(models.User)
     if err := c.BodyParser(user); err != nil {
         return utils.ResponseError(c, 400, "F03", "Datos inválidos")
+        
     }
+    
 
     // 3)  password
     if len(user.Password) < 12 {
@@ -83,17 +90,48 @@ func CreateUser(c *fiber.Ctx) error {
     }
     user.Password = string(hash)
 
-    if _, err := config.DB.Exec(context.Background(),
-        "INSERT INTO usuarios (nombre, apellido, correo, password, tipo_usuario) VALUES ($1,$2,$3,$4,$5)",
+     // 5) Generar secreto TOTP
+    key, err := totp.Generate(totp.GenerateOpts{
+        Issuer:      "HospitalApp",
+        AccountName: user.Correo,
+        Algorithm:   otp.AlgorithmSHA1,
+        Digits:      otp.DigitsSix,
+        Period:      30,
+    })
+    if err != nil {
+        return utils.ResponseError(c, 500, "F07", "Error generando MFA secret")
+    }
+    user.MFASecret = key.Secret()
+    // user.MFAEnabled queda en false por defecto
+
+
+    // 6) Insertar usuario con MFA en la BD
+    _, err = config.DB.Exec(context.Background(),
+        `INSERT INTO usuarios 
+         (nombre, apellido, correo, password, tipo_usuario, mfa_secret, mfa_enabled)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         user.Nombre, user.Apellido, user.Correo, user.Password, user.Tipo,
-    ); err != nil {
-        return utils.ResponseError(c, 500, "F07", "Error al insertar usuario")
+        user.MFASecret, false,
+    )
+    if err != nil {
+        return utils.ResponseError(c, 500, "F08", "Error al insertar usuario")
     }
 
-    // 5) Responder éxito
+    /* // 5) Responder éxito
     return utils.ResponseSuccess(c, 201, "S01", []fiber.Map{
         {"message": "Usuario creado correctamente"},
+    }) */
+
+    // 7) Devolver al cliente la URL OTP para que la escanee
+    return utils.ResponseSuccess(c, 201, "S01", []fiber.Map{
+        {
+            "message":     "Usuario creado correctamente",
+            "otpauth_url": key.URL(),  // ej: otpauth://totp/HospitalApp:email?secret=XXX...
+        },
     })
+     
+
+    
 }
 
 // Para la contraseña acepte 12 carcateres con simbolo ynumeros
@@ -111,35 +149,30 @@ func esPasswordValida(pass string) bool {
         }
     }
     return tieneNumero && tieneSimbolo
+
 }
-
-
-
 
 // GetUsers devuelve la lista de usuarios registrados en la base de datos
 func GetUsers(c *fiber.Ctx) error {
-    rows, err := config.DB.Query(context.Background(), 
-    "SELECT id_usuario, nombre, apellido, correo, password, tipo_usuario FROM usuarios")
-    if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al obtener usuarios"})
+        rows, err := config.DB.Query(context.Background(), 
+        "SELECT id_usuario, nombre, apellido, correo, password, tipo_usuario FROM usuarios")
+        if err != nil {
+            return utils.ResponseError(c, 500, "F08", "Error al obtener usuarios")
+        }
+        defer rows.Close()
+
+        var usuarios []models.User
+
+        for rows.Next() {
+        var user models.User
+        err := rows.Scan(&user.ID, &user.Nombre, &user.Apellido, &user.Correo, &user.Password, &user.Tipo)
+        if err != nil {
+            return utils.ResponseError(c, 500, "F09", "Error al leer datos")
+        }
+        usuarios = append(usuarios, user)
     }
-    defer rows.Close()
-
-    var usuarios []models.User
-
-    for rows.Next() {
-    var user models.User
-    err := rows.Scan(&user.ID, &user.Nombre, &user.Apellido, &user.Correo, &user.Password, &user.Tipo)
-    if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al leer datos"})
-    }
-    usuarios = append(usuarios, user)
+        return utils.ResponseSuccess(c, 200, "S03", usuarios)
 }
-
-
-    return c.JSON(usuarios)
-}
-
 
 // Obtener usuario por ID
 func GetUserByID(c *fiber.Ctx) error {
@@ -151,12 +184,10 @@ func GetUserByID(c *fiber.Ctx) error {
     Scan(&user.ID, &user.Nombre, &user.Apellido, &user.Correo, &user.Password, &user.Tipo)
 
     if err != nil {
-        return c.Status(404).JSON(fiber.Map{"error": "Usuario no encontrado"})
+        return utils.ResponseError(c, 404, "F10", "Usuario no encontrado")
     }
-
-    return c.JSON(user)
+     return utils.ResponseSuccess(c, 200, "S04", user)
 }
-
 
 // Actualizar usuario por ID
 func UpdateUser(c *fiber.Ctx) error {
@@ -164,18 +195,18 @@ func UpdateUser(c *fiber.Ctx) error {
     user := new(models.User)
 
     if err := c.BodyParser(user); err != nil {
-        return c.Status(400).JSON(fiber.Map{"error": "Datos inválidos"})
+        return utils.ResponseError(c, 400, "F11", "Datos inválidos")
     }
 
     // Validación de contraseña
     if !esPasswordValida(user.Password) {
-        return c.Status(400).JSON(fiber.Map{"error": "Contraseña debe tener mínimo 12 caracteres, incluir símbolo y número"})
+        return utils.ResponseError(c, 400, "F12", "Contraseña debe tener mínimo 12 caracteres, incluir símbolo y número")
     }
 
     // Hasheo de contraseña
     hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
     if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al procesar la contraseña"})
+         return utils.ResponseError(c, 500, "F13", "Error al procesar la contraseña")
     }
     user.Password = string(hash)
 
@@ -185,10 +216,10 @@ func UpdateUser(c *fiber.Ctx) error {
         user.Nombre, user.Apellido, user.Correo, user.Password, user.Tipo, id)
 
     if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al actualizar usuario"})
+        return utils.ResponseError(c, 500, "F14", "Error al actualizar usuario")
     }
 
-    return c.JSON(fiber.Map{"message": "Usuario actualizado correctamente"})
+    return utils.ResponseSuccess(c, 200, "S06", []fiber.Map{{"message": "Usuario eliminado correctamente"}})
 }
 
 
@@ -200,11 +231,13 @@ func DeleteUser(c *fiber.Ctx) error {
         "DELETE FROM usuarios WHERE id_usuario=$1", id)
 
     if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al eliminar usuario"})
+       return utils.ResponseError(c, 500, "F15", "Error al eliminar usuario")
     }
 
-    return c.JSON(fiber.Map{"message": "Usuario eliminado correctamente"})
+   return utils.ResponseSuccess(c, 200, "S06", []fiber.Map{{"message": "Usuario eliminado correctamente"}})
 }
+
+
 
 
 // Login permite a un usuario autenticarse y devuelve un token JWT
@@ -212,10 +245,11 @@ func Login(c *fiber.Ctx) error {
     var datos struct {
         Correo   string `json:"correo"`
         Password string `json:"password"`
+        OTP      string `json:"otp"`  
     }
 
     if err := c.BodyParser(&datos); err != nil {
-        return utils.ResponseError(c, 401, "F01", "Credenciales inválidas")
+        return utils.ResponseError(c, 401, "F16", "Credenciales inválidas")
     }
 
     // 1. Obtener id, hash y rol
@@ -224,16 +258,40 @@ func Login(c *fiber.Ctx) error {
     if err := config.DB.QueryRow(context.Background(),
         "SELECT id_usuario, password, tipo_usuario FROM usuarios WHERE correo=$1",
         datos.Correo).Scan(&id, &hashedPassword, &rolNombre); err != nil {
-        return c.Status(401).JSON(fiber.Map{"error": "Credenciales incorrectas"})
+        return utils.ResponseError(c, 401, "F17", "Credenciales incorrectas")
     }
 
     // 2. Validar hash correcto
     if len(hashedPassword) < 4 || hashedPassword[:4] != "$2a$" {
-        return c.Status(401).JSON(fiber.Map{"error": "Usuario inválido, recrea tu cuenta"})
+        return utils.ResponseError(c, 401, "F18", "Usuario inválido, recrea tu cuenta")
     }
     if bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(datos.Password)) != nil {
-        return c.Status(401).JSON(fiber.Map{"error": "Credenciales incorrectas"})
+         return utils.ResponseError(c, 401, "F19", "Credenciales incorrectas")
     }
+
+    // 2b) Si ya había MFA configurado, exigir OTP
+    var mfaEnabled bool
+    var mfaSecret  string
+    config.DB.QueryRow(context.Background(),
+        "SELECT mfa_enabled, mfa_secret FROM usuarios WHERE id_usuario=$1", id,
+    ).Scan(&mfaEnabled, &mfaSecret)
+
+    // Si MFA aún no está activado pero el usuario manda OTP, lo ignoramos pero lo advertimos (opcional)
+    // Puedes simplemente documentarlo o hacer un log
+    if !mfaEnabled && datos.OTP != "" {
+        // fmt.Println("MFA no está activado, OTP ignorado")
+    }
+
+    if mfaEnabled {
+        if datos.OTP == "" {
+            return utils.ResponseError(c, 401, "MFA01", "OTP requerido")
+        }
+        if !totp.Validate(datos.OTP, mfaSecret) {
+            return utils.ResponseError(c, 401, "MFA02", "OTP inválido")
+        }
+    }
+
+    
 
     // 3. Cargar permisos desde la BBD 
     rows, err := config.DB.Query(context.Background(),
@@ -243,7 +301,7 @@ func Login(c *fiber.Ctx) error {
          JOIN roles r        ON r.id = rp.rol_id
          WHERE r.nombre = $1`, rolNombre)
     if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al obtener permisos"})
+        return utils.ResponseError(c, 500, "F20", "Error al obtener permisos")
     }
     defer rows.Close()
 
@@ -255,11 +313,18 @@ func Login(c *fiber.Ctx) error {
         }
     }
 
-    // 4. Generar Access Token
-    accessToken, err := utils.GenerarToken(id, permisos)
+    // 4. Generar Access Token (ahora con tipo de usuario)
+    accessToken, err := utils.GenerarToken(id, permisos, rolNombre)
     if err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al generar AccessToken"})
+        return utils.ResponseError(c, 500, "F21", "Error al generar AccessToken")
     }
+
+    //  Intentamos eliminar tokens anteriores; si falla, solo lo logueamos y seguimos.
+     if _, err := config.DB.Exec(context.Background(),
+        `DELETE FROM refresh_tokens WHERE user_id = $1`, id); err != nil {
+        return utils.ResponseError(c, 500, "F22", "Error al limpiar tokens anteriores")
+    }
+
 
     // 5. Generar Refresh Token y tmabien guardarlo en BD
     refreshToken, expiresAt := utils.GenerateRefreshToken()
@@ -268,11 +333,11 @@ func Login(c *fiber.Ctx) error {
          VALUES ($1, $2, $3)`,
         refreshToken, id, expiresAt,
     ); err != nil {
-        return c.Status(500).JSON(fiber.Map{"error": "Error al generar RefreshToken"})
+         return utils.ResponseError(c, 500, "F23", "Error al generar RefreshToken")
     }
 
     // 6. Devolver ambos
-    return utils.ResponseSuccess(c, 200, "S02", []fiber.Map{
+   return utils.ResponseSuccess(c, 200, "S02", []fiber.Map{
     {
         "access_token":  accessToken,
         "refresh_token": refreshToken,

@@ -1,0 +1,11 @@
+
+{
+  "type": "object",
+  "required": ["error","intCode","statusCode"],
+  "properties": {
+    "error":      { "type": "string" },
+    "intCode":    { "type": "string" },
+    "statusCode": { "type": "integer" }
+  },
+  "additionalProperties": false
+}
