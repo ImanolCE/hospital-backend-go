@@ -12,6 +12,10 @@ func ConsultaRoutes(app *fiber.App) {
         middleware.Autenticacion([]string{"crear_consultas"}),
         handlers.CreateConsulta,
     )
+     app.Get("/consultas/paciente/:id",
+        middleware.Autenticacion([]string{"ver_consultas"}),
+        handlers.GetConsultasByPaciente,  // <— tu nueva función
+    )
     app.Get("/consultas",
         middleware.Autenticacion([]string{"ver_consultas"}),
         handlers.GetConsultas,

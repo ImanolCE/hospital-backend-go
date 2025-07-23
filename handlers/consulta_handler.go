@@ -7,6 +7,7 @@ import (
 	"hospital-back/utils"
 
 	"strings"
+	"strconv"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/xeipuuv/gojsonschema"
@@ -110,6 +111,56 @@ func GetConsultaByID(c *fiber.Ctx) error {
 		"tipo":           d.Tipo,
 	}})
 }
+
+
+// GetConsultasByPaciente devuelve todas las consultas de un paciente
+func GetConsultasByPaciente(c *fiber.Ctx) error {
+  // 1) Parsear el parámetro de ruta a entero
+  pacienteID, err := strconv.Atoi(c.Params("id"))
+  if err != nil {
+    return utils.ResponseError(c, fiber.StatusBadRequest, "F01", "ID de paciente inválido")
+  }
+
+  // 2) Ejecutar el query
+  rows, err := config.DB.Query(context.Background(),
+    `SELECT id_consulta, id_paciente, id_medico, id_consultorio, id_horario, diagnostico, costo, tipo
+       FROM consultas
+      WHERE id_paciente = $1`,
+    pacienteID,
+  )
+  if err != nil {
+    return utils.ResponseError(c, fiber.StatusInternalServerError, "F02", "Error al obtener consultas")
+  }
+  defer rows.Close()
+
+  var results []fiber.Map
+  for rows.Next() {
+    var d models.Consulta
+    if err := rows.Scan(
+      &d.ID, &d.PacienteID, &d.MedicoID,
+      &d.ConsultorioID, &d.HorarioID,
+      &d.Diagnostico, &d.Costo, &d.Tipo,
+    ); err != nil {
+      return utils.ResponseError(c, fiber.StatusInternalServerError, "F03", "Error al leer consulta")
+    }
+    results = append(results, fiber.Map{
+      "id":             d.ID,
+      "id_paciente":    d.PacienteID,
+      "id_medico":      d.MedicoID,
+      "id_consultorio": d.ConsultorioID,
+      "id_horario":     d.HorarioID,
+      "diagnostico":    d.Diagnostico,
+      "costo":          d.Costo,
+      "tipo":           d.Tipo,
+    })
+  }
+
+  // 3) Responder con tu wrapper estándar
+  return utils.ResponseSuccess(c, fiber.StatusOK, "S00", results)
+}
+
+
+
 
 // UpdateConsulta actualiza una consulta existente
 func UpdateConsulta(c *fiber.Ctx) error {
